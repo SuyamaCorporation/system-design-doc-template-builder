@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>System Design Document Builder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans">
+  <div class="max-w-4xl mx-auto p-4">
+    <header class="mb-6">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 class="text-2xl font-bold text-sky-400">System Design Document Builder</h1>
+          <p class="text-gray-400 text-sm mt-1">Fill each section, then generate a complete Markdown document</p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button id="btn-generate" class="px-4 py-2 bg-sky-700 hover:bg-sky-600 rounded-lg text-sm font-semibold transition" aria-label="Generate Markdown document">
+            Generate Markdown
+          </button>
+          <button id="btn-copy" class="hidden px-4 py-2 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-sm font-semibold transition" aria-label="Copy Markdown to clipboard">
+            Copy to Clipboard
+          </button>
+          <button id="btn-clear" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-semibold transition" aria-label="Clear all fields">
+            Clear All
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Copy status -->
+    <div id="copy-status" class="hidden mb-4 p-3 bg-emerald-900 border border-emerald-700 rounded-lg text-emerald-300 text-sm" role="status" aria-live="polite">
+      Markdown copied to clipboard!
+    </div>
+
+    <!-- Auto-save indicator -->
+    <div id="autosave-msg" class="text-xs text-gray-600 mb-4" aria-live="polite">Auto-saved to localStorage</div>
+
+    <!-- Document title + metadata -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
+      <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">Document Metadata</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <label for="doc-title" class="block text-xs text-gray-500 mb-1">Document Title</label>
+          <input id="doc-title" type="text" placeholder="e.g. User Authentication Service Design"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500"
+            aria-label="Document title" />
+        </div>
+        <div>
+          <label for="doc-author" class="block text-xs text-gray-500 mb-1">Author(s)</label>
+          <input id="doc-author" type="text" placeholder="e.g. Alice Smith, Bob Chen"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500"
+            aria-label="Document authors" />
+        </div>
+        <div>
+          <label for="doc-version" class="block text-xs text-gray-500 mb-1">Version</label>
+          <input id="doc-version" type="text" placeholder="e.g. 1.0.0"
+            class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-sky-500"
+            aria-label="Document version" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Sections form -->
+    <div id="sections-container" class="space-y-4 mb-6"></div>
+
+    <!-- Generated output -->
+    <section id="output-section" class="hidden">
+      <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-3">Generated Markdown</h2>
+      <div class="relative">
+        <pre id="output-pre" class="bg-gray-900 border border-gray-800 rounded-xl p-4 text-xs text-gray-300 overflow-auto max-h-[60vh] whitespace-pre-wrap" aria-label="Generated markdown output"></pre>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const SECTIONS = [
+      {
+        id: 'context',
+        title: '1. Context & Motivation',
+        placeholder: 'Describe the business problem or opportunity this system addresses. What existing pain points does it solve? Who are the stakeholders? What triggered this design?',
+        rows: 5,
+        mdHeading: '## 1. Context & Motivation',
+      },
+      {
+        id: 'architecture',
+        title: '2. Architecture Overview',
+        placeholder: 'Describe the high-level architecture: components, layers, communication patterns. Include diagrams as ASCII art or reference external tools (Mermaid, Lucidchart). What architectural style (microservices, monolith, event-driven)?',
+        rows: 7,
+        mdHeading: '## 2. Architecture Overview',
+      },
+      {
+        id: 'data-model',
+        title: '3. Data Model',
+        placeholder: 'Define key entities, relationships, and data stores. Include schema snippets, ER diagram notes, or table definitions. What database technology and why? Indexing strategy, sharding approach.',
+        rows: 6,
+        mdHeading: '## 3. Data Model',
+      },
+      {
+        id: 'api-surface',
+        title: '4. API Surface',
+        placeholder: 'List key endpoints or RPC methods. For each: HTTP method, path, request/response shape, authentication. OpenAPI snippet or table format. Rate limiting, versioning strategy.',
+        rows: 7,
+        mdHeading: '## 4. API Surface',
+      },
+      {
+        id: 'error-handling',
+        title: '5. Error Handling',
+        placeholder: 'How are errors classified (transient vs permanent)? Retry policies, circuit breakers, fallback strategies. Error codes and user-facing messages. Logging and alerting approach.',
+        rows: 5,
+        mdHeading: '## 5. Error Handling',
+      },
+      {
+        id: 'testing',
+        title: '6. Testing Strategy',
+        placeholder: 'Unit, integration, and E2E test approach. Test coverage targets. Test data management. Performance/load testing plan. Chaos engineering considerations.',
+        rows: 5,
+        mdHeading: '## 6. Testing Strategy',
+      },
+      {
+        id: 'deployment',
+        title: '7. Deployment',
+        placeholder: 'Deployment targets (cloud, on-prem, hybrid). CI/CD pipeline overview. Infrastructure as code approach. Blue/green or canary deployment strategy. Rollback plan. SLO targets.',
+        rows: 5,
+        mdHeading: '## 7. Deployment',
+      },
+    ];
+
+    let autosaveTimer = null;
+
+    function loadFromStorage() {
+      try {
+        const saved = localStorage.getItem('sysdesign-doc');
+        if (saved) return JSON.parse(saved);
+      } catch (e) {}
+      return {};
+    }
+
+    function saveToStorage() {
+      try {
+        const data = gatherData();
+        localStorage.setItem('sysdesign-doc', JSON.stringify(data));
+        const msg = document.getElementById('autosave-msg');
+        msg.textContent = 'Auto-saved ' + new Date().toLocaleTimeString();
+      } catch (e) {}
+    }
+
+    function gatherData() {
+      const data = {
+        title: document.getElementById('doc-title').value,
+        author: document.getElementById('doc-author').value,
+        version: document.getElementById('doc-version').value,
+        sections: {},
+      };
+      SECTIONS.forEach(sec => {
+        const ta = document.getElementById('ta-' + sec.id);
+        if (ta) data.sections[sec.id] = ta.value;
+      });
+      return data;
+    }
+
+    function scheduleAutosave() {
+      clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(saveToStorage, 800);
+    }
+
+    function buildForm() {
+      const saved = loadFromStorage();
+      const container = document.getElementById('sections-container');
+      container.innerHTML = '';
+
+      if (saved.title) document.getElementById('doc-title').value = saved.title;
+      if (saved.author) document.getElementById('doc-author').value = saved.author;
+      if (saved.version) document.getElementById('doc-version').value = saved.version;
+
+      ['doc-title', 'doc-author', 'doc-version'].forEach(id => {
+        document.getElementById(id).addEventListener('input', scheduleAutosave);
+      });
+
+      SECTIONS.forEach(sec => {
+        const div = document.createElement('div');
+        div.className = 'bg-gray-900 border border-gray-800 rounded-xl p-4';
+
+        const labelRow = document.createElement('div');
+        labelRow.className = 'flex justify-between items-center mb-2';
+
+        const label = document.createElement('label');
+        label.htmlFor = 'ta-' + sec.id;
+        label.className = 'text-sm font-semibold text-sky-300';
+        label.textContent = sec.title;
+
+        const charCount = document.createElement('span');
+        charCount.id = 'cc-' + sec.id;
+        charCount.className = 'text-xs text-gray-600';
+        charCount.setAttribute('aria-live', 'polite');
+        charCount.textContent = '0 chars';
+
+        labelRow.appendChild(label);
+        labelRow.appendChild(charCount);
+
+        const ta = document.createElement('textarea');
+        ta.id = 'ta-' + sec.id;
+        ta.rows = sec.rows;
+        ta.placeholder = sec.placeholder;
+        ta.className = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 resize-y focus:outline-none focus:border-sky-500';
+        ta.setAttribute('aria-label', sec.title + ' content');
+
+        if (saved.sections && saved.sections[sec.id]) {
+          ta.value = saved.sections[sec.id];
+          charCount.textContent = ta.value.length + ' chars';
+        }
+
+        ta.addEventListener('input', () => {
+          charCount.textContent = ta.value.length + ' chars';
+          scheduleAutosave();
+        });
+
+        div.appendChild(labelRow);
+        div.appendChild(ta);
+        container.appendChild(div);
+      });
+    }
+
+    function generateMarkdown() {
+      const data = gatherData();
+      const now = new Date().toISOString().slice(0, 10);
+      const lines = [];
+
+      const title = data.title || 'System Design Document';
+      lines.push('# ' + title);
+      lines.push('');
+      lines.push('| Field | Value |');
+      lines.push('|-------|-------|');
+      lines.push('| Author(s) | ' + (data.author || '—') + ' |');
+      lines.push('| Version | ' + (data.version || '1.0.0') + ' |');
+      lines.push('| Date | ' + now + ' |');
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+
+      // TOC
+      lines.push('## Table of Contents');
+      lines.push('');
+      SECTIONS.forEach(sec => {
+        const anchor = sec.title.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, '-');
+        lines.push('- [' + sec.title + '](#' + anchor + ')');
+      });
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+
+      SECTIONS.forEach(sec => {
+        lines.push(sec.mdHeading);
+        lines.push('');
+        const content = (data.sections[sec.id] || '').trim();
+        lines.push(content || '_[Not yet filled in]_');
+        lines.push('');
+        lines.push('---');
+        lines.push('');
+      });
+
+      lines.push('_Document generated by System Design Document Builder_');
+      return lines.join('\n');
+    }
+
+    document.getElementById('btn-generate').addEventListener('click', () => {
+      const md = generateMarkdown();
+      const pre = document.getElementById('output-pre');
+      pre.textContent = md;
+      document.getElementById('output-section').classList.remove('hidden');
+      document.getElementById('btn-copy').classList.remove('hidden');
+      document.getElementById('output-section').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    document.getElementById('btn-copy').addEventListener('click', () => {
+      const md = document.getElementById('output-pre').textContent;
+      const copy = (text) => {
+        return navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject();
+      };
+      copy(md).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = md;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }).finally ? copy(md).finally(() => {}) : null;
+
+      navigator.clipboard.writeText(md).then(() => {}).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = md;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      });
+
+      const statusEl = document.getElementById('copy-status');
+      statusEl.classList.remove('hidden');
+      setTimeout(() => statusEl.classList.add('hidden'), 3000);
+    });
+
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      if (!confirm('Clear all fields? This cannot be undone.')) return;
+      try { localStorage.removeItem('sysdesign-doc'); } catch (e) {}
+      document.getElementById('doc-title').value = '';
+      document.getElementById('doc-author').value = '';
+      document.getElementById('doc-version').value = '';
+      SECTIONS.forEach(sec => {
+        const ta = document.getElementById('ta-' + sec.id);
+        if (ta) { ta.value = ''; }
+        const cc = document.getElementById('cc-' + sec.id);
+        if (cc) cc.textContent = '0 chars';
+      });
+      document.getElementById('output-section').classList.add('hidden');
+      document.getElementById('btn-copy').classList.add('hidden');
+    });
+
+    buildForm();
+  </script>
+</body>
+</html>
